@@ -7,8 +7,8 @@ PaperPilot helps students and developers find the latest research on any topic, 
 🔗 **Live app:** https://paperpilot-resarch-paper.streamlit.app
 
 ## Screenshots
-![PaperPilot home and results](assets/screenshot-home.png)
-![Open-source code finder](assets/screenshot-code.png)
+![PaperPilot home and results](assets/screenshot-summary.png)
+![Open-source code finder](assets/screenshot-ideas.png)
 
 ## The problem
 Research papers are hard to find, dense to read, and rarely lead anywhere practical. Students end up juggling a search engine, PDFs, a chatbot, and GitHub just to get from "interesting paper" to "something I can build."
