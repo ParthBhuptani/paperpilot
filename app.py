@@ -7,6 +7,7 @@ import streamlit as st
 import xml.etree.ElementTree as ET
 from google import genai
 import time
+import re
 
 MODEL = "gemma-4-26b-a4b-it"
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -77,14 +78,20 @@ def search_arxiv(topic, latest, n=8):
 
 
 @st.cache_data(ttl=600)
-def find_repos(title):
-    words = [w for w in title.replace(":", " ").replace("-", " ").split() if len(w) > 2]
-    for n in (8, 5, 3):
-        q = " ".join(words[:n]) + " in:name,description,readme"
+def find_repos(title, link):
+    arxiv_id = re.sub(r"v\d+$", "", link.split("/abs/")[-1])
+    stop = {"the", "and", "for", "with", "from", "towards", "toward", "using", "via",
+            "into", "based", "through", "that", "this", "are", "its", "survey"}
+    words = [w for w in title.replace(":", " ").replace("-", " ").replace(",", " ").split()
+             if len(w) > 3 and w.lower() not in stop]
+    queries = [f'"{arxiv_id}" in:readme']
+    for n in (5, 4, 3):
+        queries.append(" ".join(words[:n]) + " in:name,description stars:>3")
+    for q in queries:
         try:
             r = requests.get(
                 "https://api.github.com/search/repositories",
-                params={"q": q, "sort": "stars", "per_page": 5},
+                params={"q": q, "per_page": 5},
                 timeout=15,
             )
             items = r.json().get("items", [])
@@ -206,7 +213,7 @@ if papers:
             with tab4:
                 st.caption("GitHub repos related to this paper. Open the issues link to "
                            "start contributing.")
-                repos = find_repos(p["title"])
+                repos = find_repos(p["title"], p["link"])
                 if not repos:
                     st.info("No matching repos found for this paper. Try another one.")
                 for repo in repos:
