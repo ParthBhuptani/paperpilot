@@ -2,18 +2,38 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import re
+import time
 import requests
 import streamlit as st
 import xml.etree.ElementTree as ET
 from google import genai
-import time
-import re
 
-MODEL = "gemma-4-26b-a4b-it"
-client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 NS = {"a": "http://www.w3.org/2005/Atom"}
+MODELS = ["gemma-4-26b-a4b-it", "gemma-4-31b-it"]
 
 st.set_page_config(page_title="PaperPilot", page_icon="📄", layout="wide")
+
+
+def get_secret(name):
+    try:
+        if name in st.secrets:
+            return st.secrets[name]
+    except Exception:
+        pass
+    return os.environ.get(name)
+
+
+GEMINI_KEY = get_secret("GEMINI_API_KEY")
+if not GEMINI_KEY:
+    st.error("Missing GEMINI_API_KEY. Add it in the app's Secrets settings.")
+    st.stop()
+
+client = genai.Client(api_key=GEMINI_KEY)
+
+GH_HEADERS = {"Accept": "application/vnd.github+json"}
+if get_secret("GITHUB_TOKEN"):
+    GH_HEADERS["Authorization"] = f"Bearer {get_secret('GITHUB_TOKEN')}"
 
 st.markdown("""
 <style>
@@ -35,9 +55,6 @@ button[data-baseweb="tab"] {font-weight: 600; font-size: 1rem;}
 a {color: #00C9A7 !important;}
 </style>
 """, unsafe_allow_html=True)
-
-
-MODELS = ["gemma-4-26b-a4b-it", "gemma-4-31b-it"]
 
 
 def ask(prompt):
@@ -77,6 +94,12 @@ def search_arxiv(topic, latest, n=8):
     return papers
 
 
+def looks_like_list(repo):
+    text = f"{repo['name']} {repo.get('description') or ''}".lower()
+    junk = ("awesome", "daily", "digest", "paper-list", "papers", "arxiv-", "news", "curated")
+    return any(j in text for j in junk)
+
+
 @st.cache_data(ttl=600)
 def find_repos(title, link):
     arxiv_id = re.sub(r"v\d+$", "", link.split("/abs/")[-1])
@@ -91,10 +114,11 @@ def find_repos(title, link):
         try:
             r = requests.get(
                 "https://api.github.com/search/repositories",
-                params={"q": q, "per_page": 5},
+                params={"q": q, "per_page": 8},
+                headers=GH_HEADERS,
                 timeout=15,
             )
-            items = r.json().get("items", [])
+            items = [i for i in r.json().get("items", []) if not looks_like_list(i)][:5]
         except Exception:
             items = []
         if items:
@@ -211,11 +235,12 @@ if papers:
                     st.markdown(st.session_state.ideas)
 
             with tab4:
-                st.caption("GitHub repos related to this paper. Open the issues link to "
-                           "start contributing.")
+                st.caption("Repos that cite this paper, or the closest open-source projects. "
+                           "Open the issues link to start contributing.")
                 repos = find_repos(p["title"], p["link"])
                 if not repos:
-                    st.info("No matching repos found for this paper. Try another one.")
+                    st.info("No open-source code found for this paper yet. It may be too new. "
+                            "Try an established topic like RAG or LoRA.")
                 for repo in repos:
                     st.markdown(f"**[{repo['full_name']}]({repo['html_url']})** "
                                 f"⭐ {repo['stargazers_count']}")
